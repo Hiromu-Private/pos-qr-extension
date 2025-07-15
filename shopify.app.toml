@@ -3,11 +3,12 @@
 client_id = "a782cde34d86e47c90af6eaf7d48f88c"
 name = "POS QR Extension"
 handle = "pos-qr-extension-1"
-application_url = "https://example.com/"
+application_url = "https://grocery-oman-thai-apollo.trycloudflare.com"
 embedded = true
 
 [build]
 include_config_on_deploy = true
+automatically_update_urls_on_dev = true
 
 [webhooks]
 api_version = "2025-07"
@@ -25,7 +26,7 @@ api_version = "2025-07"
 scopes = "write_products"
 
 [auth]
-redirect_urls = [ "https://example.com/api/auth" ]
+redirect_urls = ["https://grocery-oman-thai-apollo.trycloudflare.com/auth/callback", "https://grocery-oman-thai-apollo.trycloudflare.com/auth/shopify/callback", "https://grocery-oman-thai-apollo.trycloudflare.com/api/auth/callback"]
 
 [pos]
 embedded = false
