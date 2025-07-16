@@ -1,0 +1,27 @@
+
+> dev
+> shopify app dev
+
+╭─ info ───────────────────────────────────────────────────────────────────────╮
+│                                                                              │
+│  Using shopify.app.toml for default values:                                  │
+│                                                                              │
+│    • Org:             Hiyaku Inc                                             │
+│    • App:             POS QR Extension                                       │
+│    • Dev store:       test-wagatsuma.myshopify.com                           │
+│    • Update URLs:     Yes                                                    │
+│                                                                              │
+│   You can pass `--reset` to your command to reset your app configuration.    │
+│                                                                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+
+Running pre-dev command: "npx prisma generate"GraphiQL server started on port 3457Proxy server started on port 51179 Build successfulDraft updated successfully for extension: qr-order-scannerEnvironment variables loaded from .env
+Prisma schema loaded from prisma/schema.prisma
+Datasource "db": SQLite database "dev.sqlite" at "file:dev.sqlite"
+
+1 migration found in prisma/migrations
+
+
+No pending migrations to apply.
+  ➜  Local:   http://localhost:51182/
+  ➜  Network: use --host to expose
