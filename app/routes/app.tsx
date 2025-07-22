@@ -25,6 +25,9 @@ export default function App() {
           Home
         </Link>
         <Link to="/app/additional">Additional page</Link>
+        <Link to="/app/debug-dashboard">🔧 Debug Dashboard</Link>
+        <Link to="/app/pos-debug">📱 POS Debug</Link>
+        <Link to="/app/performance-monitor">📊 Performance Monitor</Link>
       </NavMenu>
       <Outlet />
     </AppProvider>

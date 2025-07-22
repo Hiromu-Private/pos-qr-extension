@@ -1,5 +1,5 @@
-import { Response } from "@remix-run/node";
 import type { LoaderFunctionArgs } from "@remix-run/node";
+import { json } from "@remix-run/node";
 import { authenticate } from "../shopify.server";
 
 // QRCode生成ライブラリを想定（実際にはqrcode npmパッケージが必要）
@@ -12,7 +12,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     
     const orderId = params.id;
     if (!orderId) {
-      return new Response("注文IDが指定されていません", { status: 400 });
+      return new globalThis.Response("注文IDが指定されていません", { status: 400 });
     }
 
     const url = new URL(request.url);
@@ -51,7 +51,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     const qrCodeSVG = generateQRCodeSVG(qrData, size);
     
     // SVGレスポンスとして返す
-    return new Response(qrCodeSVG, {
+    return new globalThis.Response(qrCodeSVG, {
       headers: {
         'Content-Type': 'image/svg+xml',
         'Cache-Control': 'public, max-age=3600', // 1時間キャッシュ
@@ -64,7 +64,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     
     const errorMessage = error instanceof Error ? error.message : '不明なエラー';
     
-    return new Response(`QRコード生成エラー: ${errorMessage}`, { 
+    return new globalThis.Response(`QRコード生成エラー: ${errorMessage}`, { 
       status: 500 
     });
   }

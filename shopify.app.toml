@@ -3,7 +3,7 @@
 client_id = "a782cde34d86e47c90af6eaf7d48f88c"
 name = "POS QR Extension"
 handle = "pos-qr-extension-1"
-application_url = "https://cove-waste-questions-responding.trycloudflare.com"
+application_url = "https://unemployment-arizona-granted-rick.trycloudflare.com"
 embedded = true
 
 [build]
@@ -26,7 +26,7 @@ api_version = "2025-07"
 scopes = "write_products,read_orders"
 
 [auth]
-redirect_urls = ["https://cove-waste-questions-responding.trycloudflare.com/auth/callback", "https://cove-waste-questions-responding.trycloudflare.com/auth/shopify/callback", "https://cove-waste-questions-responding.trycloudflare.com/api/auth/callback"]
+redirect_urls = ["https://unemployment-arizona-granted-rick.trycloudflare.com/auth/callback", "https://unemployment-arizona-granted-rick.trycloudflare.com/auth/shopify/callback", "https://unemployment-arizona-granted-rick.trycloudflare.com/api/auth/callback"]
 
 [pos]
 embedded = false

@@ -19,6 +19,7 @@ import OfflineManager from './OfflineManager'
 
 interface OrderInfo {
   id: string
+  legacyResourceId?: string
   orderNumber: string
   customer: string
   total: string
@@ -39,60 +40,8 @@ interface OrderInfo {
   note?: string
   trackingNumbers?: string[]
   cancelReason?: string
-}
-
-interface ShopifyOrder {
-  id: string
-  name: string
-  email?: string
-  phone?: string
-  customer?: {
-    displayName?: string
-    firstName?: string
-    lastName?: string
-    email?: string
-  }
-  totalPriceSet?: {
-    shopMoney?: {
-      amount: string
-      currencyCode: string
-    }
-  }
-  subtotalPriceSet?: {
-    shopMoney?: {
-      amount: string
-      currencyCode: string
-    }
-  }
-  totalTaxSet?: {
-    shopMoney?: {
-      amount: string
-      currencyCode: string
-    }
-  }
-  totalShippingPriceSet?: {
-    shopMoney?: {
-      amount: string
-      currencyCode: string
-    }
-  }
-  displayFinancialStatus?: string
-  displayFulfillmentStatus?: string
-  processedAt?: string
-  tags?: string[]
-  note?: string
-  shippingAddress?: {
-    firstName?: string
-    lastName?: string
-    address1?: string
-    city?: string
-    province?: string
-    zip?: string
-    country?: string
-  }
-  lineItems?: {
-    edges: Array<{
-      node: {
+  itemsCount?: number
+  lineItems?: Array<{
         title: string
         quantity: number
         variant?: {
@@ -108,26 +57,44 @@ interface ShopifyOrder {
           }
           product?: {
             title: string
-          }
-        }
-        discountedTotalSet?: {
-          shopMoney?: {
-            amount: string
-            currencyCode: string
-          }
         }
       }
     }>
   }
-  fulfillments?: Array<{
-    trackingInfo?: {
-      number?: string
-      url?: string
+
+interface SearchResult {
+  success: boolean
+  message: string
+  searchTerm: string
+  searchType: string
+  totalFound: number
+  orders: Array<{
+    id: string
+    legacyResourceId?: string
+    name: string
+    customer: string
+    email?: string
+    phone?: string
+    totalPrice?: {
+      amount: string
+      currency: string
+      formatted: string
     }
-    status?: string
+    financialStatus?: string
+    fulfillmentStatus?: string
+    createdAt: string
+    processedAt?: string
+    updatedAt?: string
+    tags?: string[]
+    note?: string
+    itemsCount: number
+    shippingAddress?: any
+    billingAddress?: any
+    lineItems: Array<any>
+    fulfillments?: Array<any>
+    transactions?: Array<any>
   }>
-  createdAt?: string
-  cancelReason?: string
+  timestamp: string
 }
 
 const Modal = () => {
@@ -135,13 +102,16 @@ const Modal = () => {
   const { data: scannerData } = useScannerDataSubscription()
   const [showScanner, setShowScanner] = useState(false)
   const [manualInput, setManualInput] = useState('')
+  const [searchType, setSearchType] = useState('auto')
   const [orderInfo, setOrderInfo] = useState<OrderInfo | null>(null)
+  const [searchResults, setSearchResults] = useState<OrderInfo[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [scanCount, setScanCount] = useState(0)
   const [lastScannedData, setLastScannedData] = useState<string | null>(null)
   const [showOrderDetails, setShowOrderDetails] = useState(false)
   const [showOfflineManager, setShowOfflineManager] = useState(false)
+  const [showSearchResults, setShowSearchResults] = useState(false)
 
   // QRコード解析関数（マルチフォーマット対応）
   const parseQRCode = (qrData: string): string | null => {
@@ -189,77 +159,76 @@ const Modal = () => {
     }
   }
 
-  // 実際のShopify Admin APIから注文データを取得
-  const fetchOrderData = async (orderId: string): Promise<OrderInfo | null> => {
+  // 新しい検索APIを使用して注文データを取得
+  const searchOrders = async (searchTerm: string, type: string = 'auto'): Promise<OrderInfo[]> => {
     try {
       setIsLoading(true)
       setError(null)
 
-      console.log('📱 注文データ取得開始:', orderId)
+      console.log('📱 注文検索開始:', { searchTerm, type })
 
-      const response = await fetch(`/api/orders/${orderId}`)
-      const data = await response.json()
+      const response = await fetch(`/api/orders/search?q=${encodeURIComponent(searchTerm)}&type=${type}&limit=10`)
+      const data: SearchResult = await response.json()
 
-      console.log('📱 APIレスポンス:', data)
+      console.log('📱 検索レスポンス:', data)
 
       if (!response.ok) {
-        throw new Error(data.error || `API呼び出しエラー: ${response.status}`)
+        throw new Error(data.error || `検索API呼び出しエラー: ${response.status}`)
       }
 
-      if (!data.order) {
-        throw new Error('注文データが見つかりません')
+      if (!data.success || !data.orders) {
+        if (data.message) {
+          setError(data.message)
+        }
+        return []
       }
 
-      const order: ShopifyOrder = data.order
-
-      // 注文データを表示用形式に変換
-      const orderInfo: OrderInfo = {
-        id: order.id || orderId,
-        orderNumber: order.name || `#${orderId}`,
-        customer: order.customer?.displayName || 
-                 `${order.customer?.firstName || ''} ${order.customer?.lastName || ''}`.trim() ||
-                 order.email || 'ゲスト顧客',
-        total: order.totalPriceSet?.shopMoney?.amount 
-               ? `¥${parseFloat(order.totalPriceSet.shopMoney.amount).toLocaleString()}`
-               : '¥0',
-        status: order.displayFulfillmentStatus || '未配送',
-        items: order.lineItems?.edges.map(edge => {
-          const item = edge.node
+      // 検索結果を表示用形式に変換
+      const orderInfoList: OrderInfo[] = data.orders.map((order) => ({
+        id: order.id,
+        legacyResourceId: order.legacyResourceId,
+        orderNumber: order.name || `#${order.legacyResourceId || 'Unknown'}`,
+        customer: order.customer || 'ゲスト顧客',
+        total: order.totalPrice?.formatted || '¥0',
+        status: order.fulfillmentStatus || '未配送',
+        items: order.lineItems?.map(item => {
           const variantTitle = item.variant?.title ? ` (${item.variant.title})` : ''
           return `${item.title}${variantTitle} × ${item.quantity}`
         }) || [],
         // 詳細情報
         createdAt: order.createdAt ? new Date(order.createdAt).toLocaleDateString('ja-JP') : undefined,
-        phone: order.phone || order.customer?.email,
-        email: order.email || order.customer?.email,
-        subtotal: order.subtotalPriceSet?.shopMoney?.amount 
-                 ? `¥${parseFloat(order.subtotalPriceSet.shopMoney.amount).toLocaleString()}`
-                 : undefined,
-        tax: order.totalTaxSet?.shopMoney?.amount 
-            ? `¥${parseFloat(order.totalTaxSet.shopMoney.amount).toLocaleString()}`
-            : undefined,
-        shipping: order.totalShippingPriceSet?.shopMoney?.amount 
-                 ? `¥${parseFloat(order.totalShippingPriceSet.shopMoney.amount).toLocaleString()}`
-                 : undefined,
-        financialStatus: order.displayFinancialStatus,
-        fulfillmentStatus: order.displayFulfillmentStatus,
+        phone: order.phone,
+        email: order.email,
+        financialStatus: order.financialStatus,
+        fulfillmentStatus: order.fulfillmentStatus,
         tags: order.tags,
         note: order.note,
-        trackingNumbers: order.fulfillments?.map(f => f.trackingInfo?.number).filter((num): num is string => Boolean(num)) || [],
-        cancelReason: order.cancelReason,
+        itemsCount: order.itemsCount,
         shippingAddress: order.shippingAddress 
           ? `${order.shippingAddress.address1 || ''} ${order.shippingAddress.city || ''} ${order.shippingAddress.province || ''} ${order.shippingAddress.zip || ''}`.trim()
-          : undefined
-      }
+          : undefined,
+        lineItems: order.lineItems
+      }))
 
-      console.log('📱 変換された注文情報:', orderInfo)
-      return orderInfo
+      console.log('📱 変換された注文情報:', orderInfoList)
+      return orderInfoList
 
     } catch (error) {
-      console.error('📱 注文データ取得エラー:', error)
+      console.error('📱 注文検索エラー:', error)
       throw error
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  // 実際のShopify Admin APIから注文データを取得（後方互換性のため）
+  const fetchOrderData = async (orderId: string): Promise<OrderInfo | null> => {
+    try {
+      const results = await searchOrders(orderId, 'id')
+      return results.length > 0 ? results[0] : null
+    } catch (error) {
+      console.error('📱 注文データ取得エラー:', error)
+      throw error
     }
   }
 
@@ -304,19 +273,38 @@ const Modal = () => {
     }
   }, [scannerData, showScanner, lastScannedData, api.toast])
 
-  // 手動入力での注文検索
+  // 手動検索での注文検索
   const handleManualSearch = async () => {
     if (!manualInput.trim()) {
-      setError('注文IDを入力してください')
+      setError('検索クエリを入力してください')
       return
     }
 
-    const order = await fetchOrderData(manualInput.trim())
-    if (order) {
-      setOrderInfo(order)
+    try {
+      const results = await searchOrders(manualInput.trim(), searchType)
+      if (results.length === 1) {
+        // 単一の結果の場合は直接表示
+        setOrderInfo(results[0])
       setManualInput('')
       setScanCount(prev => prev + 1)
+      } else if (results.length > 1) {
+        // 複数の結果の場合は選択画面を表示
+        setSearchResults(results)
+        setShowSearchResults(true)
+        await api.toast.show(`🔍 ${results.length}件の注文が見つかりました`)
+      }
+    } catch (error) {
+      console.error('検索エラー:', error)
+      setError(error instanceof Error ? error.message : '検索中にエラーが発生しました')
     }
+  }
+
+  // 検索結果から注文を選択
+  const selectOrderFromResults = (order: OrderInfo) => {
+    setOrderInfo(order)
+    setShowSearchResults(false)
+    setSearchResults([])
+    api.toast.show(`✅ 注文 ${order.orderNumber} を選択しました`)
   }
 
   // 注文詳細画面への遷移
@@ -333,6 +321,13 @@ const Modal = () => {
     api.toast.show('📱 スキャン画面に戻りました')
   }
 
+  // 検索結果画面から戻る
+  const handleBackFromSearchResults = () => {
+    setShowSearchResults(false)
+    setSearchResults([])
+    api.toast.show('📱 メイン画面に戻りました')
+  }
+
   // 詳細画面を表示する場合
   if (showOrderDetails && orderInfo) {
     return (
@@ -340,6 +335,64 @@ const Modal = () => {
         orderInfo={orderInfo} 
         onBack={handleBackFromDetails}
       />
+    )
+  }
+
+  // 検索結果一覧を表示する場合
+  if (showSearchResults && searchResults.length > 0) {
+    return (
+      <Navigator>
+        <Screen name="SearchResults" title="検索結果">
+          <ScrollView>
+            <SectionHeader title={`検索結果 (${searchResults.length}件)`} />
+            
+            {searchResults.map((order, index) => (
+              <Section key={order.id || index}>
+                <Stack direction="vertical">
+                  <Stack direction="horizontal">
+                    <Text>注文番号:</Text>
+                    <Text>{order.orderNumber}</Text>
+                  </Stack>
+                  
+                  <Stack direction="horizontal">
+                    <Text>顧客:</Text>
+                    <Text>{order.customer}</Text>
+                  </Stack>
+                  
+                  <Stack direction="horizontal">
+                    <Text>合計金額:</Text>
+                    <Text>{order.total}</Text>
+                  </Stack>
+                  
+                  <Stack direction="horizontal">
+                    <Text>ステータス:</Text>
+                    <Text>{order.status}</Text>
+                  </Stack>
+                  
+                  {order.createdAt && (
+                    <Stack direction="horizontal">
+                      <Text>注文日:</Text>
+                      <Text>{order.createdAt}</Text>
+                    </Stack>
+                  )}
+                  
+                  <Button
+                    title="📋 この注文を選択"
+                    onPress={() => selectOrderFromResults(order)}
+                  />
+                </Stack>
+              </Section>
+            ))}
+            
+            <Section>
+              <Button
+                title="⬅️ 戻る"
+                onPress={handleBackFromSearchResults}
+              />
+            </Section>
+          </ScrollView>
+        </Screen>
+      </Navigator>
     )
   }
 
@@ -395,22 +448,48 @@ const Modal = () => {
                     onPress={startCameraScanning}
                     isDisabled={isLoading}
                   />
-                  <Text>💡 QRコードが読み取れない場合は、手動入力をお試しください</Text>
+                  <Text>💡 QRコードが読み取れない場合は、手動検索をお試しください</Text>
                 </Stack>
               )}
             </Stack>
           </Section>
 
-          {/* 手動入力機能 */}
+          {/* 手動検索機能 */}
           {!showScanner && (
             <Section>
               <Stack direction="vertical">
-                <Text>⌨️ 手動入力</Text>
+                <Text>🔍 手動検索</Text>
+                
+                {/* 検索タイプ選択 */}
+                <Stack direction="vertical">
+                  <Text>検索方法:</Text>
+                  <Button
+                    title={`自動判別 ${searchType === 'auto' ? '✓' : ''}`}
+                    onPress={() => setSearchType('auto')}
+                  />
+                  <Button
+                    title={`注文ID ${searchType === 'id' ? '✓' : ''}`}
+                    onPress={() => setSearchType('id')}
+                  />
+                  <Button
+                    title={`注文番号 ${searchType === 'name' ? '✓' : ''}`}
+                    onPress={() => setSearchType('name')}
+                  />
+                  <Button
+                    title={`顧客名 ${searchType === 'customer' ? '✓' : ''}`}
+                    onPress={() => setSearchType('customer')}
+                  />
+                  <Button
+                    title={`メールアドレス ${searchType === 'email' ? '✓' : ''}`}
+                    onPress={() => setSearchType('email')}
+                  />
+                </Stack>
+                
                 <TextField
-                  label="注文ID"
+                  label="検索クエリ"
                   value={manualInput}
                   onChange={setManualInput}
-                  placeholder="例: 1179"
+                  placeholder="例: 1179, #1179, customer@example.com"
                 />
                 <Button
                   title="🔍 注文を検索"
@@ -477,43 +556,10 @@ const Modal = () => {
                     </Stack>
                   )}
                   
-                  {(orderInfo.subtotal || orderInfo.tax || orderInfo.shipping) && (
-                    <Stack direction="vertical">
-                      <Text>💰 金額詳細:</Text>
-                      {orderInfo.subtotal && (
-                        <Stack direction="horizontal">
-                          <Text>　小計:</Text>
-                          <Text>{orderInfo.subtotal}</Text>
-                        </Stack>
-                      )}
-                      {orderInfo.tax && (
-                        <Stack direction="horizontal">
-                          <Text>　税金:</Text>
-                          <Text>{orderInfo.tax}</Text>
-                        </Stack>
-                      )}
-                      {orderInfo.shipping && (
-                        <Stack direction="horizontal">
-                          <Text>　送料:</Text>
-                          <Text>{orderInfo.shipping}</Text>
-                        </Stack>
-                      )}
-                    </Stack>
-                  )}
-                  
                   {orderInfo.shippingAddress && (
                     <Stack direction="vertical">
                       <Text>📦 配送先:</Text>
                       <Text>{orderInfo.shippingAddress}</Text>
-                    </Stack>
-                  )}
-                  
-                  {orderInfo.trackingNumbers && orderInfo.trackingNumbers.length > 0 && (
-                    <Stack direction="vertical">
-                      <Text>🚚 追跡番号:</Text>
-                      {orderInfo.trackingNumbers.map((trackingNumber, index) => (
-                        <Text key={index}>• {trackingNumber}</Text>
-                      ))}
                     </Stack>
                   )}
                   
@@ -530,19 +576,12 @@ const Modal = () => {
                       <Text>{orderInfo.note}</Text>
                     </Stack>
                   )}
-                  
-                  {orderInfo.cancelReason && (
-                    <Stack direction="vertical">
-                      <Text>❌ キャンセル理由:</Text>
-                      <Text>{orderInfo.cancelReason}</Text>
-                    </Stack>
-                  )}
                 </Stack>
 
                 {/* 商品一覧 */}
                 {orderInfo.items.length > 0 && (
                   <Stack direction="vertical">
-                    <Text>🛒 注文商品:</Text>
+                    <Text>🛒 注文商品 ({orderInfo.itemsCount || orderInfo.items.length}点):</Text>
                     {orderInfo.items.map((item, index) => (
                       <Text key={index}>• {item}</Text>
                     ))}
@@ -556,11 +595,12 @@ const Modal = () => {
                     onPress={viewOrderDetails}
                   />
                   <Button
-                    title="🔄 新しくスキャン"
+                    title="🔄 新しく検索"
                     onPress={() => {
                       setOrderInfo(null)
                       setError(null)
                       setLastScannedData(null)
+                      setManualInput('')
                     }}
                   />
                 </Stack>
@@ -595,6 +635,11 @@ const Modal = () => {
                     <Text>{showScanner ? '📹 稼働中' : '📵 停止中'}</Text>
                   </Stack>
                   
+                  <Stack direction="horizontal">
+                    <Text>検索タイプ:</Text>
+                    <Text>{searchType}</Text>
+                  </Stack>
+                  
                   {scannerData && (
                     <Stack direction="horizontal">
                       <Text>最新スキャン:</Text>
@@ -604,8 +649,20 @@ const Modal = () => {
                 </Stack>
                 
                 <Button
-                  title="🧪 接続テスト"
-                  onPress={() => api.toast.show('🎉 システムは正常に動作しています')}
+                  title="🧪 API接続テスト"
+                  onPress={async () => {
+                    try {
+                      const response = await fetch('/api/debug')
+                      const data = await response.json()
+                      if (data.success) {
+                        await api.toast.show('✅ API接続正常')
+                      } else {
+                        await api.toast.show('❌ API接続エラー')
+                      }
+                    } catch (error) {
+                      await api.toast.show('❌ 接続テスト失敗')
+                    }
+                  }}
                 />
                 
                 <Button
